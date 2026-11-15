@@ -1,0 +1,34 @@
+appId: dev.bettermail.desktop
+productName: Better Mail
+artifactName: Better-Mail-${version}-${os}-${arch}.${ext}
+icon: resources/icon.png
+directories:
+  output: release
+files:
+  - out/**
+  - package.json
+  - LICENSE
+  - THIRD_PARTY_NOTICES.md
+asar: true
+asarUnpack:
+  - '**/*.node'
+publish: null
+mac:
+  icon: resources/icon.icns
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Better Mail
+linux:
+  executableName: better-mail
+  category: Office
+  maintainer: 文凯
+  target:
+    - AppImage
+    - deb

@@ -1,0 +1,21 @@
+.tooltip-disabled-trigger {
+  display: inline-flex;
+  vertical-align: middle;
+}
+.tooltip-disabled-trigger > :disabled {
+  pointer-events: none;
+}
+[data-slot='tooltip-content'][data-state='closed'] {
+  animation: none;
+  pointer-events: none;
+}
+.sidebar-status:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  border-radius: 5px;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='tooltip-content'] {
+    animation: none;
+  }
+}

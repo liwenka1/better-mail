@@ -1,0 +1,24 @@
+node_modules/
+out/
+dist/
+release/
+coverage/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+test-results/
+artifacts/
+
+# Local development tests and internal working notes
+/tests/
+**/__tests__/
+**/*.test.*
+**/*.spec.*
+/scripts/*smoke*.mjs
+/scripts/test.mjs
+/vitest.config.ts
+/docs/
+/AGENTS.md
+/src/**/README.md

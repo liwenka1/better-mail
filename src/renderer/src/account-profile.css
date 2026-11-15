@@ -1,0 +1,19 @@
+.account-profile-modal {
+  width: 460px;
+}
+.account-profile-modal .modal-title-row {
+  padding: 22px 24px 14px;
+}
+.account-profile-modal .modal-description {
+  overflow-wrap: anywhere;
+}
+.account-profile-modal .account-profile-form {
+  margin: 0;
+  padding: 4px 24px 24px;
+  border: 0;
+  overflow-y: auto;
+}
+.account-profile-modal .account-profile-hint {
+  color: var(--muted);
+  font-size: 12px;
+}

@@ -1,0 +1,11 @@
+node_modules
+out
+dist
+release
+artifacts
+coverage
+test-results
+pnpm-lock.yaml
+THIRD_PARTY_NOTICES.md
+resources
+LICENSE

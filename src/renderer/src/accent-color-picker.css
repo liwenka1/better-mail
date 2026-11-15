@@ -1,0 +1,99 @@
+.accent-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.accent-color-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-width: 62px;
+  padding: 9px 10px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.accent-color-option:hover:not(:disabled),
+.accent-color-option[aria-pressed='true'] {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.accent-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--swatch-color);
+  color: #11161c;
+  box-shadow: inset 0 0 0 1px #0001;
+}
+.custom-swatch {
+  background: conic-gradient(#f36aa9, #daa13a, #4a9b79, #448ac4, #9673d5, #f36aa9);
+  color: #ffffff;
+}
+.accent-color-description {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.7;
+}
+.accent-picker-popover {
+  width: 252px;
+  max-width: calc(100vw - 24px);
+  padding: 16px;
+}
+.accent-picker-heading {
+  margin-bottom: 13px;
+  font-size: 12px;
+  font-weight: 550;
+}
+.accent-picker-popover .react-colorful {
+  width: 100%;
+  height: 170px;
+}
+.accent-picker-popover .react-colorful__saturation {
+  border-radius: 6px 6px 0 0;
+}
+.accent-picker-popover .react-colorful__hue {
+  height: 18px;
+  border-radius: 0 0 6px 6px;
+}
+.accent-picker-popover .react-colorful__pointer {
+  width: 18px;
+  height: 18px;
+}
+.accent-hex-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.accent-hex-field input {
+  min-width: 0;
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--field-bg);
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+}
+.accent-hex-field > span {
+  flex-shrink: 0;
+}
+.accent-picker-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 15px;
+}
+.accent-picker-popover .error-panel {
+  margin-top: 12px;
+  font-size: 11px;
+}

@@ -1,0 +1,44 @@
+.remote-image-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.remote-image-notice > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.remote-image-copy {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.6;
+}
+.remote-image-copy p {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.remote-image-copy small {
+  display: block;
+  font-size: 10px;
+}
+.remote-image-copy [role='alert'] {
+  color: var(--danger);
+  margin-top: 4px;
+}
+.remote-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 150px;
+}
+.remote-image-actions .button {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
