@@ -4,7 +4,13 @@ export const releaseTargets = {
   'mac-arm64': { platform: 'darwin', arch: 'arm64', os: 'mac', extensions: ['dmg', 'zip'] },
   'mac-x64': { platform: 'darwin', arch: 'x64', os: 'mac', extensions: ['dmg', 'zip'] },
   'win-x64': { platform: 'win32', arch: 'x64', os: 'win', extensions: ['exe'] },
-  'linux-x64': { platform: 'linux', arch: 'x64', os: 'linux', extensions: ['AppImage', 'deb'] }
+  'linux-x64': {
+    platform: 'linux',
+    arch: 'x64',
+    os: 'linux',
+    extensions: ['AppImage', 'deb'],
+    artifactArch: { AppImage: 'x86_64', deb: 'amd64' }
+  }
 }
 
 export async function releaseVersion() {
@@ -26,7 +32,8 @@ export function artifactNames(version, target) {
     const configuration = releaseTargets[name]
     if (!configuration) throw new Error(`Unsupported release target: ${name}`)
     return configuration.extensions.map(
-      (extension) => `Better-Mail-${version}-${configuration.os}-${configuration.arch}.${extension}`
+      (extension) =>
+        `Better-Mail-${version}-${configuration.os}-${configuration.artifactArch?.[extension] || configuration.arch}.${extension}`
     )
   })
 }

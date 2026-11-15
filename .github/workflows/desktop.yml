@@ -30,7 +30,7 @@ jobs:
             runner: macos-15-intel
             builder: --mac --x64
           - target: win-x64
-            runner: windows-2025
+            runner: windows-2022
             builder: --win --x64
           - target: linux-x64
             runner: ubuntu-24.04
@@ -49,6 +49,18 @@ jobs:
           package-manager-cache: false
       - name: Install pnpm
         run: npm install --global pnpm@10.28.2 --ignore-scripts
+      - name: Set up Windows native-build Python
+        if: runner.os == 'Windows'
+        id: windows-python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Select Windows native-build Python
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          NATIVE_PYTHON: ${{ steps.windows-python.outputs.python-path }}
+        run: '"PYTHON=$env:NATIVE_PYTHON" >> $env:GITHUB_ENV'
       - name: Install Linux packaging libraries
         if: runner.os == 'Linux'
         run: |
