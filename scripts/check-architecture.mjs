@@ -31,7 +31,7 @@ async function walk(path) {
 let failed = false
 for (const [directory, forbidden, allowedPath] of checks) {
   for (const file of await walk(directory)) {
-    if (allowedPath && file.includes(allowedPath)) continue
+    if (allowedPath && file.replaceAll('\\', '/').includes(allowedPath)) continue
     forbidden.lastIndex = 0
     const matches = [...(await readFile(file, 'utf8')).matchAll(forbidden)]
     if (matches.length) {
