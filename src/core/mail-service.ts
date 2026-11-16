@@ -279,6 +279,7 @@ export class MailService {
         return
       }
       case 'accounts.oauth':
+      case 'messages.cachedImages':
       case 'messages.loadImages':
       case 'attachments.pick':
       case 'attachments.save':

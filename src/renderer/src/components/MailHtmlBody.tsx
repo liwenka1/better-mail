@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ImageOff } from 'lucide-react'
 import type { RemoteImagesResult } from '../../../shared/remote-images'
 import type { WindowTheme } from '../../../shared/window'
@@ -12,9 +12,18 @@ import '../remote-images.css'
 interface ImageState {
   scope: string
   html: string
+  bodyHash?: string
+  restoring: boolean
   pending: boolean
+  hidden: boolean
   result?: RemoteImagesResult
   error?: string
+  cacheError?: boolean
+}
+
+async function bodyFingerprint(html: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(html))
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 /** Loading images grants this document no network or script permissions. */
@@ -32,13 +41,32 @@ export function MailHtmlBody({
   onHeightLimit?: (text: string) => void
 }) {
   const scope = JSON.stringify([accountId, messageId])
-  const [state, setState] = useState<ImageState>({ scope, html, pending: false })
-  const inFlight = useRef<{ scope: string; html: string } | null>(null)
+  const identity = useMemo(() => ({ scope, html }), [scope, html])
+  const activeIdentity = useRef<typeof identity | null>(identity)
+  useLayoutEffect(() => {
+    activeIdentity.current = identity
+    return () => {
+      if (activeIdentity.current === identity) activeIdentity.current = null
+    }
+  }, [identity])
+  const [state, setState] = useState<ImageState>({
+    scope,
+    html,
+    restoring: true,
+    pending: false,
+    hidden: false
+  })
+  const inFlight = useRef<{ identity: typeof identity } | null>(null)
   const current: ImageState =
-    state.scope === scope && state.html === html ? state : { scope, html, pending: false }
+    state.scope === scope && state.html === html
+      ? state
+      : { scope, html, restoring: true, pending: false, hidden: false }
   const images = useMemo(
-    () => new Map(current.result?.images.map((image) => [image.source, image.dataUrl])),
-    [current.result]
+    () =>
+      new Map(
+        current.hidden ? [] : current.result?.images.map((image) => [image.source, image.dataUrl])
+      ),
+    [current.result, current.hidden]
   )
   const prepared = useMemo(() => prepareMailDocument(html, images), [html, images])
   const frameDocument = useMemo(() => {
@@ -54,31 +82,72 @@ export function MailHtmlBody({
   const frame = useRef<HTMLIFrameElement | null>(null)
   const onFrameLoad = useMailFrameHeight(frame, frameDocument.revision, onHeightLimit)
   const loaded = prepared.loadedImageCount
+  const hasRemoteImages = prepared.remoteImageCount > 0
+  const hasCachedImages = Boolean(current.result?.images.length)
   useEffect(() => {
-    inFlight.current = null
-    setState((previous) =>
-      previous.scope === scope && previous.html === html
-        ? previous
-        : { scope, html, pending: false }
-    )
-  }, [scope, html])
-  useEffect(
-    () => () => {
-      inFlight.current = null
-    },
-    []
-  )
-  async function loadImages() {
-    if (inFlight.current?.scope === scope && inFlight.current.html === html) return
-    const ticket = { scope, html }
+    const ticket = { identity }
     inFlight.current = ticket
-    setState({ ...current, pending: true, error: undefined })
+    let bodyHash: string | undefined
+    setState({ scope, html, restoring: hasRemoteImages, pending: false, hidden: false })
+    if (hasRemoteImages)
+      void (async () => {
+        try {
+          bodyHash = await bodyFingerprint(html)
+          if (inFlight.current !== ticket || activeIdentity.current !== identity) return
+          const result = await request('messages.cachedImages', { accountId, messageId, bodyHash })
+          if (inFlight.current !== ticket || activeIdentity.current !== identity) return
+          setState({
+            scope,
+            html,
+            bodyHash,
+            restoring: false,
+            pending: false,
+            hidden: false,
+            result: result.images.length ? result : undefined
+          })
+        } catch (caught) {
+          if (inFlight.current !== ticket || activeIdentity.current !== identity) return
+          setState({
+            scope,
+            html,
+            bodyHash,
+            restoring: false,
+            pending: false,
+            hidden: false,
+            error: errorMessage(caught),
+            cacheError: true
+          })
+        } finally {
+          if (inFlight.current === ticket) inFlight.current = null
+        }
+      })()
+    else inFlight.current = null
+    return () => {
+      if (inFlight.current?.identity === identity) inFlight.current = null
+    }
+  }, [accountId, messageId, scope, html, identity, hasRemoteImages])
+  async function loadImages() {
+    if (inFlight.current?.identity === identity || activeIdentity.current !== identity) return
+    const ticket = { identity }
+    inFlight.current = ticket
+    setState({ ...current, pending: true, error: undefined, cacheError: false })
     try {
-      const result = await request('messages.loadImages', { accountId, messageId })
-      if (inFlight.current === ticket) setState({ scope, html, pending: false, result })
+      const bodyHash = current.bodyHash || (await bodyFingerprint(html))
+      if (inFlight.current !== ticket || activeIdentity.current !== identity) return
+      const result = await request('messages.loadImages', { accountId, messageId, bodyHash })
+      if (inFlight.current === ticket && activeIdentity.current === identity)
+        setState({
+          scope,
+          html,
+          bodyHash,
+          restoring: false,
+          pending: false,
+          hidden: false,
+          result
+        })
     } catch (caught) {
-      if (inFlight.current === ticket)
-        setState({ ...current, pending: false, error: errorMessage(caught) })
+      if (inFlight.current === ticket && activeIdentity.current === identity)
+        setState({ ...current, pending: false, error: errorMessage(caught), cacheError: false })
     } finally {
       if (inFlight.current === ticket) inFlight.current = null
     }
@@ -86,41 +155,50 @@ export function MailHtmlBody({
   return (
     <>
       {prepared.remoteImageCount > 0 && (
-        <div className="remote-image-notice" aria-busy={current.pending || undefined}>
+        <div
+          className="remote-image-notice"
+          aria-busy={current.pending || current.restoring || undefined}
+        >
           <ImageOff size={15} aria-hidden="true" />
           <div className="remote-image-copy">
             <p role="status" aria-live="polite">
-              {current.pending
-                ? '正在加载远程图片…'
-                : current.error
-                  ? '远程图片加载失败'
-                  : current.result
-                    ? loaded === prepared.remoteImageCount
-                      ? '已加载本封邮件的远程图片'
-                      : `已加载 ${loaded} / ${prepared.remoteImageCount} 张图片，其余图片暂时无法加载。`
-                    : `已阻止 ${prepared.remoteImageCount} 张远程图片自动加载`}
+              {current.restoring
+                ? '正在读取本地图片…'
+                : current.pending
+                  ? '正在加载远程图片…'
+                  : current.error
+                    ? current.cacheError
+                      ? '本地图片缓存读取失败'
+                      : '远程图片加载失败'
+                    : current.hidden
+                      ? '本封邮件的图片已隐藏'
+                      : current.result
+                        ? loaded === prepared.remoteImageCount
+                          ? '已显示本封邮件的图片'
+                          : `已显示 ${loaded} / ${prepared.remoteImageCount} 张图片，其余图片可手动加载。`
+                        : `已阻止 ${prepared.remoteImageCount} 张远程图片自动加载`}
             </p>
-            <small>加载会连接图片服务器，可能让发件人知道你已阅读。</small>
+            <small>手动加载会连接图片服务器，可能让发件人知道你已阅读。</small>
             {current.error && <small role="alert">{current.error}</small>}
           </div>
           <div className="remote-image-actions">
-            {loaded > 0 && (
+            {hasCachedImages && (
               <Button
                 unstyled
                 type="button"
                 className="button"
-                disabled={current.pending}
-                onClick={() => setState({ scope, html, pending: false })}
+                disabled={current.pending || current.restoring}
+                onClick={() => setState({ ...current, hidden: !current.hidden })}
               >
-                隐藏图片
+                {current.hidden ? '显示图片' : '隐藏图片'}
               </Button>
             )}
-            {loaded < prepared.remoteImageCount && (
+            {!current.hidden && loaded < prepared.remoteImageCount && (
               <Button
                 unstyled
                 type="button"
                 className="button"
-                disabled={current.pending}
+                disabled={current.pending || current.restoring}
                 onClick={() => void loadImages()}
               >
                 {current.pending && <Spinner size={12} />}

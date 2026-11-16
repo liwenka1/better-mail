@@ -14,9 +14,10 @@ import { writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { IPC_EVENT, IPC_REQUEST, methods, requestSchemas, type Method } from '../shared/contracts'
-import { MailError, type AppEvent, type MessageDetail, type Result } from '../shared/model'
+import { MailError, type AppEvent, type Result } from '../shared/model'
 import { TITLE_BAR_HEIGHT, type WindowChromeState } from '../shared/window'
 import type { DownloadedAttachment } from '../core/ports'
+import type { RemoteImageCacheContext } from '../core/store'
 import { SystemVault } from './vault'
 import { MailWorkerClient } from './worker-client'
 import { authorizeMailbox } from './oauth'
@@ -213,8 +214,13 @@ else {
         }
       )
       remoteImages = new RemoteImageLoader({
-        getMessage: async (accountId, messageId) =>
-          (await worker!.request('messages.get', { accountId, messageId })) as MessageDetail
+        cache: {
+          read: async (scope) =>
+            (await worker!.request('$images.context', scope)) as RemoteImageCacheContext,
+          write: async (scope, images) => {
+            await worker!.request('$images.save', { ...scope, images })
+          }
+        }
       })
       syncWake = new SyncWakeController({
         powerMonitor,
@@ -267,6 +273,8 @@ else {
               } finally {
                 authorizing = false
               }
+            } else if (method === 'messages.cachedImages') {
+              value = await remoteImages!.cached(input)
             } else if (method === 'messages.loadImages') {
               value = await remoteImages!.load(input)
             } else if (method === 'attachments.pick') {

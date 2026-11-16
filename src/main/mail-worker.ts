@@ -10,7 +10,8 @@ import {
 } from '../infrastructure/providers'
 import { MailError, type Credentials, type Result } from '../shared/model'
 import type { CredentialVault } from '../core/ports'
-import type { Method } from '../shared/contracts'
+import { requestSchemas, type Method } from '../shared/contracts'
+import type { RemoteImageCacheEntry } from '../core/store'
 import { parseSyncWakeReason } from './sync-wake'
 
 const port = process.parentPort!
@@ -77,7 +78,15 @@ async function boot() {
       } else if (data.method === '$sync.wake') {
         service.notifyEnvironmentChange(parseSyncWakeReason(data.input))
       } else if (data.method === '$oauth.add') value = await service.addOAuthAccount(data.input)
-      else if (data.method === '$attachments.import')
+      else if (data.method === '$images.context')
+        value = store.readRemoteImages(requestSchemas['messages.cachedImages'].parse(data.input))
+      else if (data.method === '$images.save') {
+        const { images, ...scope } = data.input
+        store.writeRemoteImages(
+          requestSchemas['messages.cachedImages'].parse(scope),
+          images as RemoteImageCacheEntry[]
+        )
+      } else if (data.method === '$attachments.import')
         value = await service.importAttachments(data.input.paths)
       else if (data.method === '$attachments.download')
         value = await service.downloadAttachment(data.input)

@@ -17,6 +17,9 @@ import type {
 
 const id = z.string().min(1).max(512)
 const address = z.email().max(320)
+const imageScope = z
+  .object({ accountId: id, messageId: id, bodyHash: z.string().regex(/^[a-f0-9]{64}$/) })
+  .strict()
 const endpoint = z.object({
   host: z
     .string()
@@ -102,7 +105,8 @@ export const requestSchemas = {
     limit: z.number().int().min(1).max(100).default(50)
   }),
   'messages.get': z.object({ accountId: id, messageId: id }),
-  'messages.loadImages': z.object({ accountId: id, messageId: id }).strict(),
+  'messages.cachedImages': imageScope,
+  'messages.loadImages': imageScope,
   'messages.action': z
     .object({
       requestId: z.uuid(),
@@ -147,6 +151,7 @@ export interface Responses {
   'accounts.sync': void
   'messages.list': MessagePage
   'messages.get': MessageDetail
+  'messages.cachedImages': RemoteImagesResult
   'messages.loadImages': RemoteImagesResult
   'messages.action': Operation
   'attachments.save': { saved: boolean }

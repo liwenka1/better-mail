@@ -90,7 +90,35 @@ const migrations = [
   CREATE INDEX orphan_markers_age ON orphan_markers(account_id,detected_at);`,
   `ALTER TABLE accounts ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0 CHECK(hidden IN (0,1));`,
   `CREATE INDEX operations_history_order ON operations(created_at,id);
-  CREATE INDEX operations_account_history_order ON operations(account_id,created_at,id);`
+  CREATE INDEX operations_account_history_order ON operations(account_id,created_at,id);`,
+  `CREATE TABLE remote_image_cache (
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    message_id TEXT NOT NULL, body_hash TEXT NOT NULL, source TEXT NOT NULL,
+    data_url TEXT NOT NULL, bytes INTEGER NOT NULL CHECK(bytes>0 AND bytes<=2097152),
+    pixels INTEGER NOT NULL CHECK(pixels>0 AND pixels<=25000000),
+    updated_at INTEGER NOT NULL, last_access_at INTEGER NOT NULL,
+    PRIMARY KEY(account_id,message_id,body_hash,source)
+  );
+  CREATE INDEX remote_image_cache_expiry ON remote_image_cache(updated_at);
+  CREATE INDEX remote_image_cache_lru ON remote_image_cache(last_access_at,updated_at);
+  CREATE TRIGGER remote_image_cache_message_deleted AFTER DELETE ON messages BEGIN
+    DELETE FROM remote_image_cache WHERE account_id=OLD.account_id AND message_id=OLD.id;
+  END;
+  CREATE TRIGGER remote_image_cache_outgoing_deleted AFTER DELETE ON outgoing_sends BEGIN
+    DELETE FROM remote_image_cache WHERE account_id=OLD.account_id AND message_id=OLD.local_message_id;
+  END;`,
+  `DROP TRIGGER remote_image_cache_message_deleted;
+  DROP TRIGGER remote_image_cache_outgoing_deleted;
+  CREATE TRIGGER remote_image_cache_message_deleted AFTER DELETE ON messages
+  WHEN NOT EXISTS(SELECT 1 FROM outgoing_sends s WHERE s.account_id=OLD.account_id
+    AND s.local_message_id=OLD.id AND s.accepted_at IS NOT NULL AND s.bound=0) BEGIN
+    DELETE FROM remote_image_cache WHERE account_id=OLD.account_id AND message_id=OLD.id;
+  END;
+  CREATE TRIGGER remote_image_cache_outgoing_deleted AFTER DELETE ON outgoing_sends
+  WHEN NOT EXISTS(SELECT 1 FROM messages m WHERE m.account_id=OLD.account_id
+    AND m.id=OLD.local_message_id) BEGIN
+    DELETE FROM remote_image_cache WHERE account_id=OLD.account_id AND message_id=OLD.local_message_id;
+  END;`
 ] as const
 
 export const SCHEMA_VERSION = migrations.length

@@ -196,3 +196,25 @@ export const outgoingMime = sqliteTable('outgoing_mime', {
     .references(() => outgoingSends.operationId, { onDelete: 'cascade' }),
   raw: blob('raw', { mode: 'buffer' }).notNull()
 })
+
+export const remoteImageCache = sqliteTable(
+  'remote_image_cache',
+  {
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    messageId: text('message_id').notNull(),
+    bodyHash: text('body_hash').notNull(),
+    source: text('source').notNull(),
+    dataUrl: text('data_url').notNull(),
+    bytes: integer('bytes').notNull(),
+    pixels: integer('pixels').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    lastAccessAt: integer('last_access_at').notNull()
+  },
+  (table) => [
+    primaryKey({ columns: [table.accountId, table.messageId, table.bodyHash, table.source] }),
+    index('remote_image_cache_expiry').on(table.updatedAt),
+    index('remote_image_cache_lru').on(table.lastAccessAt, table.updatedAt)
+  ]
+)

@@ -41,6 +41,12 @@ import type {
   SyncSchedule
 } from '../../core/store'
 import type {
+  RemoteImageCacheContext,
+  RemoteImageCacheEntry,
+  RemoteImageCacheScope
+} from '../../core/store'
+import { SqliteRemoteImageCache } from './remote-image-cache'
+import type {
   RemoteFolder,
   RemoteMessage,
   RemoteRef,
@@ -113,6 +119,7 @@ function draftContent(draft: DraftInput): string {
 export class SqliteStore implements MailStore {
   private readonly raw: Database.Database
   private readonly orm: ReturnType<typeof drizzle<typeof schema>>
+  private readonly imageCache: SqliteRemoteImageCache
 
   constructor(dbPath: string) {
     if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 })
@@ -127,10 +134,19 @@ export class SqliteStore implements MailStore {
       throw error
     }
     this.orm = drizzle(this.raw, { schema })
+    this.imageCache = new SqliteRemoteImageCache(this.raw, (accountId, messageId) =>
+      this.getMessage(accountId, messageId)
+    )
   }
 
   close(): void {
     this.raw.close()
+  }
+  readRemoteImages(scope: RemoteImageCacheScope): RemoteImageCacheContext {
+    return this.imageCache.read(scope)
+  }
+  writeRemoteImages(scope: RemoteImageCacheScope, images: RemoteImageCacheEntry[]): void {
+    this.imageCache.write(scope, images)
   }
 
   listAccounts(): Account[] {
@@ -519,6 +535,7 @@ export class SqliteStore implements MailStore {
       WHERE t.account_id=? AND t.message_id=?`
       )
       .all(accountId, previousId) as Row[]
+    this.imageCache.adoptMessageId(accountId, previousId, nextId)
     this.raw
       .prepare('UPDATE messages SET id=? WHERE account_id=? AND id=?')
       .run(nextId, accountId, previousId)

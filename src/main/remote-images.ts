@@ -2,23 +2,33 @@ import { lookup } from 'node:dns/promises'
 import { request as httpRequest, type IncomingHttpHeaders } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { isIP } from 'node:net'
-import { Parser } from 'htmlparser2'
+import { createHash } from 'node:crypto'
 import ipaddr from 'ipaddr.js'
 import { imageSize } from 'image-size'
 import { requestSchemas } from '../shared/contracts'
-import { MailError, type MessageDetail } from '../shared/model'
+import { MailError } from '../shared/model'
 import { normalizeRemoteImageSource, type RemoteImagesResult } from '../shared/remote-images'
+import type {
+  RemoteImageCacheContext,
+  RemoteImageCacheEntry,
+  RemoteImageCacheScope
+} from '../core/store'
+import {
+  imageSources,
+  REMOTE_IMAGE_CACHE_LIMITS,
+  validateCachedImage as checkCachedImage
+} from '../infrastructure/storage/remote-image-cache'
 
 export const REMOTE_IMAGE_LIMITS = {
-  images: 24,
+  images: REMOTE_IMAGE_CACHE_LIMITS.imagesPerMessage,
   concurrency: 3,
   redirects: 3,
-  imageBytes: 2 * 1024 * 1024,
-  totalBytes: 8 * 1024 * 1024,
+  imageBytes: REMOTE_IMAGE_CACHE_LIMITS.imageBytes,
+  totalBytes: REMOTE_IMAGE_CACHE_LIMITS.messageBytes,
   deadlineMs: 12_000,
-  dimension: 12_000,
-  pixels: 25_000_000,
-  totalPixels: 40_000_000
+  dimension: REMOTE_IMAGE_CACHE_LIMITS.dimension,
+  pixels: REMOTE_IMAGE_CACHE_LIMITS.imagePixels,
+  totalPixels: REMOTE_IMAGE_CACHE_LIMITS.messagePixels
 } as const
 
 interface Address {
@@ -32,9 +42,13 @@ export interface RemoteImageResponse {
   dispose(): void
 }
 export interface RemoteImageDependencies {
-  getMessage(accountId: string, messageId: string): Promise<MessageDetail>
+  cache: {
+    read(scope: RemoteImageCacheScope): Promise<RemoteImageCacheContext>
+    write(scope: RemoteImageCacheScope, images: RemoteImageCacheEntry[]): Promise<void>
+  }
   resolve?: (hostname: string) => Promise<Address[]>
   transport?: (url: URL, address: Address, signal: AbortSignal) => Promise<RemoteImageResponse>
+  /** Each I/O phase has this budget; explicit cancellation spans all phases. */
   deadlineMs?: number
 }
 
@@ -45,11 +59,25 @@ function aborted(signal: AbortSignal): void {
   if (signal.aborted) throw imageFailure()
 }
 function withinDeadline<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  aborted(signal)
   return new Promise<T>((resolve, reject) => {
-    const cancel = () => reject(imageFailure())
+    const cleanup = () => signal.removeEventListener('abort', cancel)
+    const cancel = () => {
+      cleanup()
+      reject(imageFailure())
+    }
     signal.addEventListener('abort', cancel, { once: true })
-    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', cancel))
+    // Observe the operation even if it aborted synchronously before returning its promise.
+    promise.then(
+      (value) => {
+        cleanup()
+        resolve(value)
+      },
+      (error) => {
+        cleanup()
+        reject(error)
+      }
+    )
+    if (signal.aborted) cancel()
   })
 }
 
@@ -101,16 +129,7 @@ export function isPublicImageAddress(address: string): boolean {
 }
 
 export function remoteImageSources(html: string): string[] {
-  const sources = new Set<string>()
-  const parser = new Parser({
-    onopentag(name, attributes) {
-      if (name !== 'img' || !attributes.src) return
-      const source = normalizeRemoteImageSource(attributes.src)
-      if (source) sources.add(source)
-    }
-  })
-  parser.end(html)
-  return [...sources]
+  return [...imageSources(html)]
 }
 
 function rasterType(bytes: Buffer): 'png' | 'jpeg' | 'gif' | 'webp' | null {
@@ -125,10 +144,107 @@ function rasterType(bytes: Buffer): 'png' | 'jpeg' | 'gif' | 'webp' | null {
   return null
 }
 
+function rasterDetails(content: Buffer, contentType: string): { bytes: number; pixels: number } {
+  const type = rasterType(content)
+  if (!type || contentType !== `image/${type}` || content.length > REMOTE_IMAGE_LIMITS.imageBytes)
+    throw imageFailure()
+  const dimensions = imageSize(content)
+  if (
+    !dimensions.width ||
+    !dimensions.height ||
+    dimensions.width > REMOTE_IMAGE_LIMITS.dimension ||
+    dimensions.height > REMOTE_IMAGE_LIMITS.dimension ||
+    dimensions.width * dimensions.height > REMOTE_IMAGE_LIMITS.pixels
+  )
+    throw imageFailure()
+  return { bytes: content.length, pixels: dimensions.width * dimensions.height }
+}
+
+function validateCachedImage(entry: RemoteImageCacheEntry): RemoteImageCacheEntry | null {
+  try {
+    checkCachedImage(entry)
+    return entry
+  } catch {
+    return null
+  }
+}
+
 export class RemoteImageLoader {
   private readonly inflight = new Map<string, Promise<RemoteImagesResult>>()
   private readonly controllers = new Set<AbortController>()
   constructor(private readonly dependencies: RemoteImageDependencies) {}
+
+  private deadlineScope(parent?: AbortSignal): { signal: AbortSignal; finish(): void } {
+    const controller = new AbortController()
+    if (!parent) this.controllers.add(controller)
+    const timer = setTimeout(
+      () => controller.abort(),
+      this.dependencies.deadlineMs ?? REMOTE_IMAGE_LIMITS.deadlineMs
+    )
+    return {
+      signal: parent ? AbortSignal.any([parent, controller.signal]) : controller.signal,
+      finish: () => {
+        clearTimeout(timer)
+        controller.abort()
+        this.controllers.delete(controller)
+      }
+    }
+  }
+
+  private async context(scope: RemoteImageCacheScope): Promise<RemoteImageCacheContext> {
+    const context = await this.dependencies.cache.read(scope)
+    if (createHash('sha256').update(context.html).digest('hex') !== scope.bodyHash)
+      throw new MailError('VALIDATION', '邮件正文已变化，请重新打开邮件后加载图片。')
+    return context
+  }
+
+  private cachedEntries(
+    context: RemoteImageCacheContext,
+    retained: string[]
+  ): RemoteImageCacheEntry[] {
+    const available = new Map<string, RemoteImageCacheEntry>()
+    for (const entry of context.images) {
+      if (retained.includes(entry.source) && !available.has(entry.source)) {
+        const valid = validateCachedImage(entry)
+        if (valid) available.set(entry.source, valid)
+      }
+    }
+    const entries: RemoteImageCacheEntry[] = []
+    let bytes = 0
+    let pixels = 0
+    for (const source of retained) {
+      const entry = available.get(source)
+      if (!entry) continue
+      if (
+        bytes + entry.bytes > REMOTE_IMAGE_LIMITS.totalBytes ||
+        pixels + entry.pixels > REMOTE_IMAGE_LIMITS.totalPixels
+      )
+        continue
+      entries.push(entry)
+      bytes += entry.bytes
+      pixels += entry.pixels
+    }
+    return entries
+  }
+
+  /** A cache lookup never resolves a host or downloads a missing image. */
+  async cached(raw: unknown): Promise<RemoteImagesResult> {
+    const scope = requestSchemas['messages.cachedImages'].parse(raw)
+    const deadline = this.deadlineScope()
+    try {
+      const context = await withinDeadline(this.context(scope), deadline.signal)
+      const sources = remoteImageSources(context.html)
+      const retained = sources.slice(0, REMOTE_IMAGE_LIMITS.images)
+      const entries = this.cachedEntries(context, retained)
+      return {
+        images: entries.map(({ source, dataUrl }) => ({ source, dataUrl })),
+        failed: retained.length - entries.length,
+        skipped: sources.length - retained.length
+      }
+    } finally {
+      deadline.finish()
+    }
+  }
 
   cancelAll(): void {
     for (const controller of this.controllers) controller.abort()
@@ -136,56 +252,53 @@ export class RemoteImageLoader {
 
   load(raw: unknown): Promise<RemoteImagesResult> {
     const input = requestSchemas['messages.loadImages'].parse(raw)
-    const key = JSON.stringify([input.accountId, input.messageId])
+    const key = JSON.stringify([input.accountId, input.messageId, input.bodyHash])
     const existing = this.inflight.get(key)
     if (existing) return existing
     if (this.inflight.size >= 2)
       return Promise.reject(new MailError('NETWORK', '已有图片正在加载，请稍后重试。', true))
-    const pending = this.loadMessage(input.accountId, input.messageId)
+    const pending = this.loadMessage(input)
     this.inflight.set(key, pending)
     void pending.finally(() => this.inflight.delete(key)).catch(() => undefined)
     return pending
   }
 
-  private async loadMessage(accountId: string, messageId: string): Promise<RemoteImagesResult> {
-    const controller = new AbortController()
-    this.controllers.add(controller)
-    const { signal } = controller
-    const timer = setTimeout(
-      () => controller.abort(),
-      this.dependencies.deadlineMs ?? REMOTE_IMAGE_LIMITS.deadlineMs
-    )
+  private async loadMessage(scope: RemoteImageCacheScope): Promise<RemoteImagesResult> {
+    // Explicit cancellation spans both phases; the network deadline must not
+    // discard completed images before the separately bounded cache write.
+    const cancellation = new AbortController()
+    this.controllers.add(cancellation)
+    const deadline = this.deadlineScope(cancellation.signal)
+    const { signal } = deadline
+    const networkBudget = new AbortController()
+    const networkSignal = AbortSignal.any([signal, networkBudget.signal])
     let receivedBytes = 0
     let receivedPixels = 0
     try {
-      const message = await withinDeadline(
-        this.dependencies.getMessage(accountId, messageId),
-        signal
-      )
-      if (message.accountId !== accountId || message.id !== messageId)
-        throw new MailError('VALIDATION', '邮件与账号不匹配。')
-      const sources = remoteImageSources(message.body.html || '')
+      const context = await withinDeadline(this.context(scope), signal)
+      const sources = remoteImageSources(context.html)
       const retained = sources.slice(0, REMOTE_IMAGE_LIMITS.images)
-      const result: RemoteImagesResult = {
-        images: [],
-        failed: 0,
-        skipped: sources.length - retained.length
-      }
+      const existing = this.cachedEntries(context, retained)
+      const completed = new Map(existing.map((entry) => [entry.source, entry]))
+      const missing = retained.filter((source) => !completed.has(source))
+      const downloaded: RemoteImageCacheEntry[] = []
+      receivedBytes = existing.reduce((sum, entry) => sum + entry.bytes, 0)
+      receivedPixels = existing.reduce((sum, entry) => sum + entry.pixels, 0)
       let next = 0
       await Promise.all(
         Array.from(
-          { length: Math.min(retained.length, REMOTE_IMAGE_LIMITS.concurrency) },
+          { length: Math.min(missing.length, REMOTE_IMAGE_LIMITS.concurrency) },
           async () => {
-            while (next < retained.length) {
-              const source = retained[next++]!
+            while (next < missing.length) {
+              const source = missing[next++]!
               try {
-                const dataUrl = await this.download(
+                const image = await this.download(
                   new URL(source),
-                  signal,
+                  networkSignal,
                   (length) => {
                     receivedBytes += length
                     if (receivedBytes > REMOTE_IMAGE_LIMITS.totalBytes) {
-                      controller.abort()
+                      networkBudget.abort()
                       throw imageFailure()
                     }
                   },
@@ -195,19 +308,39 @@ export class RemoteImageLoader {
                     receivedPixels += pixels
                   }
                 )
-                result.images.push({ source, dataUrl })
+                const entry = { source, ...image }
+                downloaded.push(entry)
+                completed.set(source, entry)
               } catch {
-                result.failed++
+                // Successful cached or downloaded images remain available for a later retry.
               }
             }
           }
         )
       )
-      return result
+      deadline.finish()
+      if (downloaded.length) {
+        aborted(cancellation.signal)
+        const persistence = this.deadlineScope(cancellation.signal)
+        try {
+          await withinDeadline(this.dependencies.cache.write(scope, downloaded), persistence.signal)
+        } finally {
+          persistence.finish()
+        }
+      }
+      return {
+        images: retained.flatMap((source) => {
+          const entry = completed.get(source)
+          return entry ? [{ source, dataUrl: entry.dataUrl }] : []
+        }),
+        failed: retained.length - completed.size,
+        skipped: sources.length - retained.length
+      }
     } finally {
-      clearTimeout(timer)
-      controller.abort()
-      this.controllers.delete(controller)
+      deadline.finish()
+      networkBudget.abort()
+      cancellation.abort()
+      this.controllers.delete(cancellation)
     }
   }
 
@@ -216,7 +349,7 @@ export class RemoteImageLoader {
     signal: AbortSignal,
     consume: (length: number) => void,
     consumePixels: (pixels: number) => void
-  ): Promise<string> {
+  ): Promise<Omit<RemoteImageCacheEntry, 'source'>> {
     let url = initial
     for (let redirect = 0; redirect <= REMOTE_IMAGE_LIMITS.redirects; redirect++) {
       aborted(signal)
@@ -267,19 +400,9 @@ export class RemoteImageLoader {
           chunks.push(Buffer.from(next.value))
         }
         const content = Buffer.concat(chunks)
-        const type = rasterType(content)
-        if (!type || contentType !== `image/${type}`) throw imageFailure()
-        const dimensions = imageSize(content)
-        if (
-          !dimensions.width ||
-          !dimensions.height ||
-          dimensions.width > REMOTE_IMAGE_LIMITS.dimension ||
-          dimensions.height > REMOTE_IMAGE_LIMITS.dimension ||
-          dimensions.width * dimensions.height > REMOTE_IMAGE_LIMITS.pixels
-        )
-          throw imageFailure()
-        consumePixels(dimensions.width * dimensions.height)
-        return `data:${contentType};base64,${content.toString('base64')}`
+        const details = rasterDetails(content, contentType)
+        consumePixels(details.pixels)
+        return { dataUrl: `data:${contentType};base64,${content.toString('base64')}`, ...details }
       } finally {
         response.dispose()
       }

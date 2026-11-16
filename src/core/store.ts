@@ -29,6 +29,21 @@ export interface StoredMessage {
   body: MessageBody | null
   ref: RemoteRef | null
 }
+export interface RemoteImageCacheScope {
+  accountId: string
+  messageId: string
+  bodyHash: string
+}
+export interface RemoteImageCacheEntry {
+  source: string
+  dataUrl: string
+  bytes: number
+  pixels: number
+}
+export interface RemoteImageCacheContext {
+  html: string
+  images: RemoteImageCacheEntry[]
+}
 export interface ActionPayload {
   value?: boolean
   targets: Array<{ messageId: string; ref: RemoteRef }>
@@ -91,6 +106,8 @@ export interface MailStore {
   listMessages(input: ListMessagesInput): MessagePage
   getMessage(accountId: string, messageId: string): StoredMessage
   cacheBody(accountId: string, messageId: string, body: MessageBody): void
+  readRemoteImages(scope: RemoteImageCacheScope): RemoteImageCacheContext
+  writeRemoteImages(scope: RemoteImageCacheScope, images: RemoteImageCacheEntry[]): void
   enqueueAction(input: MailActionInput, fingerprint: string): Operation
   enqueueSend(input: SendInput, fingerprint: string): Operation
   prepareSend(operationId: string, raw: Uint8Array, date: number): void
