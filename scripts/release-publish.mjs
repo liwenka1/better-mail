@@ -4,12 +4,20 @@ import { lstat, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { artifactNames, releaseVersion } from './release-targets.mjs'
 
-if (process.env.GITHUB_ACTIONS !== 'true' || !process.env.GITHUB_REF?.startsWith('refs/tags/'))
-  throw new Error('Publish releases only from the successful tag workflow.')
+const manual = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch'
+if (
+  process.env.GITHUB_ACTIONS !== 'true' ||
+  (manual
+    ? process.env.GITHUB_REF !== 'refs/heads/main' ||
+      !process.env.RELEASE_TAG ||
+      !process.env.RELEASE_COMMIT
+    : !process.env.GITHUB_REF?.startsWith('refs/tags/'))
+)
+  throw new Error('Publish releases only from the tag or prepared manual release workflow.')
 const version = await releaseVersion()
 const tag = `v${version}`
 const repository = process.env.GITHUB_REPOSITORY
-const commit = process.env.GITHUB_SHA
+const commit = manual ? process.env.RELEASE_COMMIT : process.env.GITHUB_SHA
 const token = process.env.GH_TOKEN
 if (!/^[\w.-]+\/[\w.-]+$/.test(repository || '') || !/^[a-f0-9]{40}$/.test(commit || '') || !token)
   throw new Error('Release repository, commit or token is missing.')

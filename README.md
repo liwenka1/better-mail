@@ -78,6 +78,14 @@ pnpm package:dir # 生成当前平台的应用目录包
 
 ## 发布
 
-主分支和 Pull Request 会执行四个平台构建。推送与 `package.json` 版本一致的标签（如 `v0.1.0`）后，CI 在全部构建成功后汇总安装包与 `SHA256SUMS.txt`，再发布 GitHub Release；单个平台失败不会发布不完整版本。已发布版本的资产不会被自动覆盖。
+主分支和 Pull Request 会执行四个平台构建。在 GitHub 输入版本号即可发布新版本：
+
+1. 打开 **Actions → Desktop build and release → Run workflow**。
+2. 选择 **main** 分支，输入版本号，例如 `0.1.1` 或 `v0.1.1`，然后运行。也支持 `0.2.0-beta.1` 这样的 SemVer 预发布版本。
+3. CI 自动提交 `package.json` 的版本变更并创建对应标签，随后从该提交构建四个平台。全部构建和校验成功后，才会汇总安装包与 `SHA256SUMS.txt` 并公开 GitHub Release。
+
+手动发布只接受 `main`。如果准备版本时发现 `main` 已移动，需要从最新的 `main` 重新发起，避免混合不同提交的源码。未公开版本失败后可以重跑原 Run；已公开的版本会被拒绝，不会覆盖现有安装包。预发布版本会标记为 Pre-release。
+
+也可以手动更新 `package.json` 后推送版本一致的标签（如 `v0.1.1`），沿用同一构建和发布流程。单个平台失败不会发布不完整版本。
 
 项目代码使用 MIT 许可；第三方依赖和复制的基础组件保留各自版权与协议，见 [第三方许可声明](THIRD_PARTY_NOTICES.md)。

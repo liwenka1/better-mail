@@ -6,17 +6,54 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本号，例如 0.1.1、v0.1.1 或 0.2.0-beta.1'
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  group: desktop-${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && 'manual-release' || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
+  prepare:
+    name: Prepare release version
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      commit: ${{ steps.prepare.outputs.commit }}
+      tag: ${{ steps.prepare.outputs.tag }}
+      version: ${{ steps.prepare.outputs.version }}
+    steps:
+      - name: Check out requested source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Prepare version commit and tag
+        id: prepare
+        run: node scripts/release-prepare.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_COMMIT_EMAIL: '2020583117@qq.com'
+
   build:
     name: ${{ matrix.target }}
+    needs: prepare
+    if: ${{ !cancelled() && (needs.prepare.result == 'success' || needs.prepare.result == 'skipped') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 35
     strategy:
@@ -37,10 +74,12 @@ jobs:
             builder: --linux --x64
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.prepare.outputs.commit || github.sha }}
           persist-credentials: false
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -90,11 +129,15 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+          overwrite: true
 
   release:
     name: Publish complete release
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') }}
+    needs: [prepare, build]
+    concurrency:
+      group: publish-${{ needs.prepare.outputs.tag || github.ref_name }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -104,6 +147,7 @@ jobs:
       - name: Check out release metadata
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.prepare.outputs.commit || github.sha }}
           persist-credentials: false
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -120,3 +164,5 @@ jobs:
         run: node scripts/release-publish.mjs
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
