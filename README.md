@@ -80,6 +80,16 @@
 
 当前版本尚未配置应用代码签名或 macOS 公证，系统可能提示无法验证发布者。跨平台构建状态见 [GitHub Actions](https://github.com/liwenka1/better-mail/actions/workflows/ci.yml)；构建成功不等同于所有系统和邮箱服务商均已完成实机验证。
 
+### macOS 注意事项
+
+由于应用当前未签名，首次打开时 macOS 可能会提示应用“已损坏”。
+
+```bash
+xattr -cr "/Applications/Better Mail.app"
+```
+
+执行一次上面的命令后，再重新打开应用即可。
+
 ## 连接邮箱
 
 <details>
