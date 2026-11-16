@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ContextMenu,
@@ -14,6 +14,7 @@ import { useUi, type View } from '../store'
 import { ErrorPanel, IconButton, Spinner } from './primitives'
 import type { MessageAction } from './MailReader'
 import { Button } from './ui/button'
+import { ScrollArea } from './ui/scroll-area'
 import { TooltipHint } from './Tooltip'
 
 const viewNames: Record<View, string> = {
@@ -67,7 +68,9 @@ export function MailList({
     setReadFilter
   } = useUi()
   const parentRef = useRef<HTMLDivElement>(null)
+  const listReady = !loading && !error && messages.length > 0
   const virtualizer = useVirtualizer({
+    enabled: listReady,
     count: messages.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 96,
@@ -80,9 +83,9 @@ export function MailList({
     if (lastIndex !== undefined && lastIndex >= messages.length - 4 && hasMore && !loadingMore)
       loadMore()
   }, [lastIndex, messages.length, hasMore, loadingMore, loadMore])
-  useEffect(() => {
-    parentRef.current?.scrollTo({ top: 0 })
-  }, [view, accountId, folderId, search, readFilter])
+  useLayoutEffect(() => {
+    if (listReady && parentRef.current) virtualizer.scrollToOffset(0, { behavior: 'auto' })
+  }, [view, accountId, folderId, search, readFilter, listReady, virtualizer])
   const title = folderName || (view === 'inbox' && !accountId ? '全部收件箱' : viewNames[view])
   return (
     <section className="list-pane" aria-label="邮件列表">
@@ -154,7 +157,12 @@ export function MailList({
           )}
         </div>
       ) : (
-        <div ref={parentRef} className="message-list-scroll">
+        <ScrollArea
+          className="message-list-scroll-area"
+          viewportClassName="message-list-scroll"
+          viewportRef={parentRef}
+          viewportProps={{ 'aria-label': '邮件列表滚动区域', tabIndex: 0 }}
+        >
           <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
             {items.map((item) => {
               const message = messages[item.index]!
@@ -304,7 +312,7 @@ export function MailList({
               )}
             </Button>
           )}
-        </div>
+        </ScrollArea>
       )}
     </section>
   )

@@ -83,8 +83,11 @@
 .account-panel > .dialog-tabs {
   padding: 0;
 }
-.account-panel > .dialog-scroll {
+.account-panel-scroll-area {
   flex: 1;
+  min-height: 0;
+}
+.account-panel .dialog-scroll {
   padding: 18px 0 0;
 }
 .settings-help-page {
@@ -93,12 +96,16 @@
   min-height: 0;
   flex: 1;
 }
-.settings-help-page > .help-content {
+.settings-help-scroll-area,
+.settings-scroll-area {
+  flex: 1;
+  min-height: 0;
+}
+.settings-help-scroll-area .help-content {
   padding: 0 0 22px;
+  overflow: visible;
 }
 .settings-body {
-  min-height: 0;
-  overflow-y: auto;
   padding: 2px 0 20px;
 }
 .settings-section + .settings-section {

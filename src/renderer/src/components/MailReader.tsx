@@ -1,4 +1,5 @@
 import { Button } from './ui/button'
+import { ScrollArea } from './ui/scroll-area'
 import { useLayoutEffect, useRef, useState } from 'react'
 import {
   DropdownMenu,
@@ -265,7 +266,13 @@ export function MailReader({
           </DropdownMenu>
         </div>
       </div>
-      <div className="reader-scroll" ref={scroll}>
+      <ScrollArea
+        className="reader-scroll-area"
+        viewportClassName="reader-scroll"
+        viewportRef={scroll}
+        viewportProps={{ 'aria-label': '邮件阅读滚动区域', tabIndex: 0 }}
+        horizontal
+      >
         <article className="mail-article">
           {displayed ? (
             <>
@@ -430,7 +437,7 @@ export function MailReader({
             </Button>
           </div>
         </article>
-      </div>
+      </ScrollArea>
     </section>
   )
 }

@@ -1,4 +1,5 @@
 import { Button } from './ui/button'
+import { ScrollArea } from './ui/scroll-area'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Check, ChevronRight, CircleHelp, Mail, Monitor, Moon, Sun } from 'lucide-react'
 import type { Account } from '../../../shared/model'
@@ -138,7 +139,12 @@ export function SettingsPage({
         {page === 'general' ? '通用设置' : page === 'accounts' ? '邮箱账号' : '使用帮助'}
       </h2>
       <div className="settings-pages">
-        <div className="settings-page settings-body" hidden={page !== 'general'}>
+        <ScrollArea
+          className="settings-page settings-scroll-area"
+          viewportClassName="settings-body"
+          viewportProps={{ 'aria-label': '通用设置内容', tabIndex: 0 }}
+          hidden={page !== 'general'}
+        >
           <section className="settings-section" aria-labelledby="settings-accounts-heading">
             <h3 id="settings-accounts-heading">邮箱账号</h3>
             <Button
@@ -208,7 +214,7 @@ export function SettingsPage({
             />
           </section>
           <p className="settings-footnote">外观偏好会保存在本机。</p>
-        </div>
+        </ScrollArea>
         <div className="settings-page settings-accounts-page" hidden={page !== 'accounts'}>
           <AccountPanel
             key={accountEntryKey}
@@ -220,7 +226,12 @@ export function SettingsPage({
           />
         </div>
         <div className="settings-page settings-help-page" hidden={page !== 'help'}>
-          <HelpContent />
+          <ScrollArea
+            className="settings-help-scroll-area"
+            viewportProps={{ 'aria-label': '使用帮助内容', tabIndex: 0 }}
+          >
+            <HelpContent />
+          </ScrollArea>
         </div>
       </div>
     </main>

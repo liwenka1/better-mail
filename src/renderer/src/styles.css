@@ -425,11 +425,12 @@ kbd {
   flex-shrink: 0;
   padding: 16px 12px 0;
 }
-.sidebar-scroll {
+.sidebar-scroll-area {
   min-height: 0;
+  min-width: 0;
   flex: 1;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
+}
+.sidebar-scroll {
   padding: 20px 10px 16px;
 }
 .sidebar-section-label {
@@ -888,11 +889,10 @@ kbd {
   font-size: 10px;
   color: var(--muted);
 }
-.message-list-scroll {
+.message-list-scroll-area {
   flex: 1;
-  overflow-y: auto;
   min-height: 0;
-  scrollbar-gutter: stable;
+  min-width: 0;
 }
 .message-row {
   display: flex;
@@ -1236,11 +1236,12 @@ kbd {
   border-radius: 3px;
   background: var(--surface-hover);
 }
-.reader-scroll {
+.reader-scroll-area {
   flex: 1;
-  overflow: auto;
   min-height: 0;
-  scrollbar-gutter: stable;
+  min-width: 0;
+}
+.reader-scroll {
   overscroll-behavior: contain;
 }
 .mail-article {
@@ -1912,7 +1913,22 @@ kbd {
   padding: 0 32px;
 }
 .utility-view {
-  padding: 30px 38px;
+  --utility-page-padding: 30px 38px;
+  padding: var(--utility-page-padding);
+}
+.utility-view.utility-scroll-view {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.utility-scroll-area {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.utility-main {
+  padding: var(--utility-page-padding);
 }
 .utility-empty {
   min-height: 330px;
@@ -2928,7 +2944,7 @@ kbd {
     width: 100%;
   }
   .utility-view {
-    padding: 28px;
+    --utility-page-padding: 28px;
   }
   .operations-table-head,
   .operation-row-summary {

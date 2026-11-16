@@ -1,4 +1,5 @@
 import { Button } from './ui/button'
+import { ScrollArea } from './ui/scroll-area'
 import { useLayoutEffect, useRef, useState } from 'react'
 import {
   ArrowRight,
@@ -155,90 +156,96 @@ export function DraftsView({
     notify('草稿已删除')
   }
   return (
-    <main className="utility-view drafts-view">
-      <UtilityPageHeader
-        title="草稿箱"
-        count={drafts.length}
-        description="还没写完的话，先好好留着。"
-        actions={
-          <Button unstyled className="button primary" onClick={onCompose}>
-            <Plus size={16} />
-            写邮件
-          </Button>
-        }
-      />
-      {error && <ErrorPanel message={error} />}
-      {loading ? (
-        <div className="utility-loading">
-          <Spinner size={26} />
-        </div>
-      ) : drafts.length === 0 ? (
-        <div className="utility-empty">
-          <div className="utility-empty-icon">
-            <PencilLine size={38} strokeWidth={1.2} />
+    <main className="utility-view utility-scroll-view drafts-view">
+      <ScrollArea
+        className="utility-scroll-area"
+        viewportClassName="utility-main"
+        viewportProps={{ 'aria-label': '草稿箱内容', tabIndex: 0 }}
+      >
+        <UtilityPageHeader
+          title="草稿箱"
+          count={drafts.length}
+          description="还没写完的话，先好好留着。"
+          actions={
+            <Button unstyled className="button primary" onClick={onCompose}>
+              <Plus size={16} />
+              写邮件
+            </Button>
+          }
+        />
+        {error && <ErrorPanel message={error} />}
+        {loading ? (
+          <div className="utility-loading">
+            <Spinner size={26} />
           </div>
-          <h2>每封好邮件，都从一句问候开始</h2>
-          <p>在写信窗口保存的草稿，会安静地等在这里。</p>
-          <Button unstyled className="button" onClick={onCompose}>
-            <PencilLine size={15} />
-            开始写信
-          </Button>
-        </div>
-      ) : (
-        <div className="draft-grid">
-          {drafts.map((draft) => (
-            <div className="draft-card" key={draft.id}>
-              <Button unstyled className="draft-card-main" onClick={() => onOpen(draft)}>
-                <span className="draft-account">
-                  <i
-                    style={{
-                      background:
-                        accounts.find((account) => account.id === draft.accountId)?.color ||
-                        '#82917a'
-                    }}
-                  />
-                  {accounts.find((account) => account.id === draft.accountId)?.name || '邮箱'}
-                  <time>{dateLabel(draft.updatedAt)}</time>
-                </span>
-                <h3>{draft.subject || '（无主题草稿）'}</h3>
-                <small>收件人：{draft.to.join(', ') || '尚未填写'}</small>
-                <p>{draft.text || '还没有正文，继续写下你的想法…'}</p>
-                <span className="draft-open">
-                  继续编辑
-                  <ArrowRight size={13} />
-                </span>
-              </Button>
-              <div className="draft-card-bottom">
-                <span>
-                  <FileText size={12} />
-                  本机草稿
-                </span>
-                <IconButton
-                  label={`删除草稿 ${draft.subject}`}
-                  onClick={(event) => {
-                    removeTrigger.current = event.currentTarget
-                    setRemovingDraft(draft)
-                  }}
-                >
-                  <Trash2 size={14} />
-                </IconButton>
-              </div>
+        ) : drafts.length === 0 ? (
+          <div className="utility-empty">
+            <div className="utility-empty-icon">
+              <PencilLine size={38} strokeWidth={1.2} />
             </div>
-          ))}
-        </div>
-      )}
-      <ConfirmDialog
-        open={removingDraft !== null}
-        onOpenChange={(open) => {
-          if (!open) setRemovingDraft(null)
-        }}
-        title="删除这份草稿？"
-        description={`“${removingDraft?.subject || '无主题草稿'}”将从本机删除，删除后无法恢复。`}
-        returnFocusRef={removeTrigger}
-        onConfirm={async () => {
-          if (removingDraft) await remove(removingDraft.id)
-        }}
-      />
+            <h2>每封好邮件，都从一句问候开始</h2>
+            <p>在写信窗口保存的草稿，会安静地等在这里。</p>
+            <Button unstyled className="button" onClick={onCompose}>
+              <PencilLine size={15} />
+              开始写信
+            </Button>
+          </div>
+        ) : (
+          <div className="draft-grid">
+            {drafts.map((draft) => (
+              <div className="draft-card" key={draft.id}>
+                <Button unstyled className="draft-card-main" onClick={() => onOpen(draft)}>
+                  <span className="draft-account">
+                    <i
+                      style={{
+                        background:
+                          accounts.find((account) => account.id === draft.accountId)?.color ||
+                          '#82917a'
+                      }}
+                    />
+                    {accounts.find((account) => account.id === draft.accountId)?.name || '邮箱'}
+                    <time>{dateLabel(draft.updatedAt)}</time>
+                  </span>
+                  <h3>{draft.subject || '（无主题草稿）'}</h3>
+                  <small>收件人：{draft.to.join(', ') || '尚未填写'}</small>
+                  <p>{draft.text || '还没有正文，继续写下你的想法…'}</p>
+                  <span className="draft-open">
+                    继续编辑
+                    <ArrowRight size={13} />
+                  </span>
+                </Button>
+                <div className="draft-card-bottom">
+                  <span>
+                    <FileText size={12} />
+                    本机草稿
+                  </span>
+                  <IconButton
+                    label={`删除草稿 ${draft.subject}`}
+                    onClick={(event) => {
+                      removeTrigger.current = event.currentTarget
+                      setRemovingDraft(draft)
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </IconButton>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <ConfirmDialog
+          open={removingDraft !== null}
+          onOpenChange={(open) => {
+            if (!open) setRemovingDraft(null)
+          }}
+          title="删除这份草稿？"
+          description={`“${removingDraft?.subject || '无主题草稿'}”将从本机删除，删除后无法恢复。`}
+          returnFocusRef={removeTrigger}
+          onConfirm={async () => {
+            if (removingDraft) await remove(removingDraft.id)
+          }}
+        />
+      </ScrollArea>
     </main>
   )
 }
@@ -290,7 +297,7 @@ export function OperationsView({
   notify: (message: string) => void
 }) {
   const [busyId, setBusyId] = useState<string | null>(null)
-  const mainRef = useRef<HTMLElement | null>(null)
+  const mainRef = useRef<HTMLDivElement | null>(null)
   useLayoutEffect(() => {
     if (!pagination?.loading && mainRef.current) mainRef.current.scrollTop = 0
   }, [pagination?.page, pagination?.loading])
@@ -348,177 +355,187 @@ export function OperationsView({
     ).length
   return (
     <main
-      ref={mainRef}
-      className="utility-view"
+      className="utility-view utility-scroll-view"
       aria-busy={loading || pagination?.loading || undefined}
     >
-      <UtilityPageHeader
-        title="操作队列"
-        description="每一次发送与更改，都有迹可循。"
-        actions={
-          <span className="local-badge">
-            <ShieldCheck size={14} />
-            保存在本机
-          </span>
-        }
-      />
-      <div className="operation-stats">
-        <div>
-          <Clock3 size={19} />
-          <span>
-            等待 / 处理中<strong>{pending}</strong>
-          </span>
-        </div>
-        <div>
-          <CircleAlert size={19} />
-          <span>
-            需要关注<strong>{needAttention}</strong>
-          </span>
-        </div>
-        <div>
-          <Workflow size={19} />
-          <span>
-            全部操作<strong>{stats?.total ?? operations.length}</strong>
-          </span>
-        </div>
-      </div>
-      {error && <ErrorPanel message={error} />}
-      {loading ? (
-        <div className="utility-loading">
-          <Spinner size={25} />
-        </div>
-      ) : operations.length === 0 ? (
-        <div className="utility-empty">
-          <div className="utility-empty-icon">
-            <Workflow size={38} strokeWidth={1.3} />
+      <ScrollArea
+        className="utility-scroll-area"
+        viewportClassName="utility-main"
+        viewportRef={mainRef}
+        viewportProps={{ 'aria-label': '操作队列内容', tabIndex: 0 }}
+      >
+        <UtilityPageHeader
+          title="操作队列"
+          description="每一次发送与更改，都有迹可循。"
+          actions={
+            <span className="local-badge">
+              <ShieldCheck size={14} />
+              保存在本机
+            </span>
+          }
+        />
+        <div className="operation-stats">
+          <div>
+            <Clock3 size={19} />
+            <span>
+              等待 / 处理中<strong>{pending}</strong>
+            </span>
           </div>
-          <h2>一切就绪，随时出发</h2>
-          <p>发送邮件、标记已读或移动邮件后，处理状态会显示在这里。</p>
-        </div>
-      ) : (
-        <div className="operations-table">
-          <div className="operations-table-head">
-            <span>操作</span>
-            <span>账号</span>
-            <span>时间</span>
-            <span>状态</span>
+          <div>
+            <CircleAlert size={19} />
+            <span>
+              需要关注<strong>{needAttention}</strong>
+            </span>
           </div>
-          {operations.map((operation) => (
-            <div
-              className={`operation-row ${operation.state === 'uncertain' ? 'uncertain' : ''}`}
-              key={operation.id}
-            >
-              <div className="operation-row-summary">
-                <span className="operation-kind">
-                  <Workflow size={16} />
-                  <strong>{operationLabels[operation.kind]}</strong>
-                  <small>
-                    {operation.kind === 'send'
-                      ? '邮件发送'
-                      : `${operation.messageIds.length} 封邮件`}
-                  </small>
-                </span>
-                <span className="operation-account">
-                  {accounts.find((account) => account.id === operation.accountId)?.email ||
-                    '已移除账号'}
-                </span>
-                <time dateTime={new Date(operation.createdAt).toISOString()}>
-                  {fullDate(operation.createdAt)}
-                </time>
-                <span className={`operation-state state-${operation.state}`}>
-                  {operation.state === 'running' && <Spinner size={11} />}
-                  {operation.kind === 'send' && operation.state === 'succeeded'
-                    ? '已发送'
-                    : stateLabels[operation.state]}
-                </span>
-              </div>
-              {(operation.error || operation.state === 'uncertain') && (
-                <div className="operation-error">
-                  <CircleAlert size={14} />
-                  <span>
-                    {operation.state === 'uncertain'
-                      ? '邮件可能已经发送。请先在邮箱网页版确认，避免重复发送。'
-                      : operation.error}
+          <div>
+            <Workflow size={19} />
+            <span>
+              全部操作<strong>{stats?.total ?? operations.length}</strong>
+            </span>
+          </div>
+        </div>
+        {error && <ErrorPanel message={error} />}
+        {loading ? (
+          <div className="utility-loading">
+            <Spinner size={25} />
+          </div>
+        ) : operations.length === 0 ? (
+          <div className="utility-empty">
+            <div className="utility-empty-icon">
+              <Workflow size={38} strokeWidth={1.3} />
+            </div>
+            <h2>一切就绪，随时出发</h2>
+            <p>发送邮件、标记已读或移动邮件后，处理状态会显示在这里。</p>
+          </div>
+        ) : (
+          <div className="operations-table">
+            <div className="operations-table-head">
+              <span>操作</span>
+              <span>账号</span>
+              <span>时间</span>
+              <span>状态</span>
+            </div>
+            {operations.map((operation) => (
+              <div
+                className={`operation-row ${operation.state === 'uncertain' ? 'uncertain' : ''}`}
+                key={operation.id}
+              >
+                <div className="operation-row-summary">
+                  <span className="operation-kind">
+                    <Workflow size={16} />
+                    <strong>{operationLabels[operation.kind]}</strong>
+                    <small>
+                      {operation.kind === 'send'
+                        ? '邮件发送'
+                        : `${operation.messageIds.length} 封邮件`}
+                    </small>
                   </span>
-                  {operation.state === 'failed' && (
-                    <Button
-                      unstyled
-                      className="text-button"
-                      disabled={busyId === operation.id || pagination?.loading}
-                      onClick={() => void retry(operation.id)}
-                    >
-                      {busyId === operation.id ? <Spinner size={12} /> : <RefreshCw size={12} />}
-                      重试
-                    </Button>
-                  )}
+                  <span className="operation-account">
+                    {accounts.find((account) => account.id === operation.accountId)?.email ||
+                      '已移除账号'}
+                  </span>
+                  <time dateTime={new Date(operation.createdAt).toISOString()}>
+                    {fullDate(operation.createdAt)}
+                  </time>
+                  <span className={`operation-state state-${operation.state}`}>
+                    {operation.state === 'running' && <Spinner size={11} />}
+                    {operation.kind === 'send' && operation.state === 'succeeded'
+                      ? '已发送'
+                      : stateLabels[operation.state]}
+                  </span>
                 </div>
-              )}
-              {operation.kind === 'send' && operation.sentCopy && (
-                <div
-                  className={`operation-error sent-copy-status sent-copy-${operation.sentCopy.state}`}
-                >
-                  {operation.sentCopy.state === 'saved' ? (
-                    <Check size={14} />
-                  ) : ['pending', 'saving'].includes(operation.sentCopy.state) ? (
-                    <Clock3 size={14} />
-                  ) : (
+                {(operation.error || operation.state === 'uncertain') && (
+                  <div className="operation-error">
                     <CircleAlert size={14} />
-                  )}
-                  <span>
-                    {copyLabels[operation.sentCopy.state]}
-                    {operation.sentCopy.error ? `：${operation.sentCopy.error}` : ''}
-                  </span>
-                  {operation.state === 'succeeded' &&
-                    ['failed', 'missing', 'uncertain'].includes(operation.sentCopy.state) && (
+                    <span>
+                      {operation.state === 'uncertain'
+                        ? '邮件可能已经发送。请先在邮箱网页版确认，避免重复发送。'
+                        : operation.error}
+                    </span>
+                    {operation.state === 'failed' && (
                       <Button
                         unstyled
-                        type="button"
                         className="text-button"
                         disabled={busyId === operation.id || pagination?.loading}
-                        onClick={() => void retryCopy(operation)}
+                        onClick={() => void retry(operation.id)}
                       >
                         {busyId === operation.id ? <Spinner size={12} /> : <RefreshCw size={12} />}
-                        {verifyCopyOnly(operation) ? '核验副本' : '补存副本'}
+                        重试
                       </Button>
                     )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-      {pagination && !loading && (
-        <nav className="operation-pagination" aria-label="操作队列分页">
-          <span className="operation-pagination-status" role="status" aria-live="polite">
-            {pagination.loading ? (
-              <>
-                <Spinner size={12} />
-                正在加载…
-              </>
-            ) : (
-              `第 ${pagination.page} 页`
-            )}
-          </span>
-          <div className="operation-pagination-controls">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!pagination.hasPrevious || pagination.loading}
-              onClick={pagination.onPrevious}
-            >
-              上一页
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!pagination.hasNext || pagination.loading}
-              onClick={pagination.onNext}
-            >
-              下一页
-            </Button>
+                  </div>
+                )}
+                {operation.kind === 'send' && operation.sentCopy && (
+                  <div
+                    className={`operation-error sent-copy-status sent-copy-${operation.sentCopy.state}`}
+                  >
+                    {operation.sentCopy.state === 'saved' ? (
+                      <Check size={14} />
+                    ) : ['pending', 'saving'].includes(operation.sentCopy.state) ? (
+                      <Clock3 size={14} />
+                    ) : (
+                      <CircleAlert size={14} />
+                    )}
+                    <span>
+                      {copyLabels[operation.sentCopy.state]}
+                      {operation.sentCopy.error ? `：${operation.sentCopy.error}` : ''}
+                    </span>
+                    {operation.state === 'succeeded' &&
+                      ['failed', 'missing', 'uncertain'].includes(operation.sentCopy.state) && (
+                        <Button
+                          unstyled
+                          type="button"
+                          className="text-button"
+                          disabled={busyId === operation.id || pagination?.loading}
+                          onClick={() => void retryCopy(operation)}
+                        >
+                          {busyId === operation.id ? (
+                            <Spinner size={12} />
+                          ) : (
+                            <RefreshCw size={12} />
+                          )}
+                          {verifyCopyOnly(operation) ? '核验副本' : '补存副本'}
+                        </Button>
+                      )}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-        </nav>
-      )}
+        )}
+        {pagination && !loading && (
+          <nav className="operation-pagination" aria-label="操作队列分页">
+            <span className="operation-pagination-status" role="status" aria-live="polite">
+              {pagination.loading ? (
+                <>
+                  <Spinner size={12} />
+                  正在加载…
+                </>
+              ) : (
+                `第 ${pagination.page} 页`
+              )}
+            </span>
+            <div className="operation-pagination-controls">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!pagination.hasPrevious || pagination.loading}
+                onClick={pagination.onPrevious}
+              >
+                上一页
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!pagination.hasNext || pagination.loading}
+                onClick={pagination.onNext}
+              >
+                下一页
+              </Button>
+            </div>
+          </nav>
+        )}
+      </ScrollArea>
     </main>
   )
 }

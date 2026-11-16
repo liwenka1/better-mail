@@ -1,4 +1,5 @@
 import { Button } from './ui/button'
+import { ScrollArea } from './ui/scroll-area'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import {
@@ -260,7 +261,11 @@ export function AccountPanel({
           已连接账号 <span>{accounts.length}</span>
         </Button>
       </div>
-      <div className="dialog-scroll">
+      <ScrollArea
+        className="account-panel-scroll-area"
+        viewportClassName="dialog-scroll"
+        viewportProps={{ 'aria-label': '邮箱账号设置内容', tabIndex: 0 }}
+      >
         {tab === 'manage' ? (
           <div className="managed-accounts">
             {accounts.length === 0 && (
@@ -603,7 +608,7 @@ export function AccountPanel({
           </form>
         )}
         {tab === 'manage' && error && !editing && <ErrorPanel message={error} />}
-      </div>
+      </ScrollArea>
       <Modal
         open={editing !== null}
         onOpenChange={(open) => {

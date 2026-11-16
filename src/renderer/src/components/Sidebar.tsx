@@ -1,4 +1,5 @@
 import { Button } from './ui/button'
+import { ScrollArea } from './ui/scroll-area'
 import { useState } from 'react'
 import {
   ChevronDown,
@@ -141,7 +142,11 @@ export function Sidebar({
           </Button>
         </TooltipHint>
       </div>
-      <div className="sidebar-scroll">
+      <ScrollArea
+        className="sidebar-scroll-area"
+        viewportClassName="sidebar-scroll"
+        viewportProps={{ 'aria-label': '邮箱与文件夹列表', tabIndex: 0 }}
+      >
         <div className="sidebar-section-label">邮件</div>
         <nav className="folder-navigation" aria-label="邮件视图">
           {navigation.map((item) => {
@@ -290,7 +295,7 @@ export function Sidebar({
             <ChevronRight size={13} />
           </Button>
         )}
-      </div>
+      </ScrollArea>
       <div className="sidebar-footer">
         <TooltipHint content={statusDetail || '添加邮箱后自动同步'} side="right">
           <div

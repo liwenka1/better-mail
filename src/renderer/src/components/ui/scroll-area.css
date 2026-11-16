@@ -1,0 +1,85 @@
+.app-scroll-area {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-scroll-area-viewport {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-radius: inherit;
+  outline: none;
+}
+
+.app-scroll-area-viewport:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.app-scroll-area-content {
+  box-sizing: border-box;
+}
+
+.app-scroll-area-scrollbar {
+  z-index: 1;
+  display: flex;
+  padding: 2px;
+  touch-action: none;
+  user-select: none;
+}
+
+.app-scroll-area-scrollbar[data-orientation='vertical'] {
+  width: 10px;
+}
+
+.app-scroll-area-scrollbar[data-orientation='horizontal'] {
+  height: 10px;
+  flex-direction: column;
+}
+
+.app-scroll-area-scrollbar[data-state='visible'] {
+  animation: scroll-area-fade-in 150ms ease both;
+}
+
+.app-scroll-area-scrollbar[data-state='hidden'] {
+  pointer-events: none;
+  animation: scroll-area-fade-out 150ms ease both;
+}
+
+.app-scroll-area-thumb {
+  position: relative;
+  flex: 1;
+  border-radius: 999px;
+  background: var(--scrollbar);
+}
+
+.app-scroll-area-thumb:hover {
+  background: var(--muted);
+}
+
+@keyframes scroll-area-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scroll-area-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-scroll-area-scrollbar[data-state] {
+    animation: none;
+  }
+}
