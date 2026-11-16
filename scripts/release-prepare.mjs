@@ -118,7 +118,7 @@ if (tagged) {
     })
     const identity = { name: actor, email }
     const prepared = await request('/git/commits', 'POST', {
-      message: `发布 ${tag}`,
+      message: `chore(release): 发布 ${tag}`,
       tree: tree.sha,
       parents: [source],
       author: identity,
@@ -139,6 +139,13 @@ await appendFile(process.env.GITHUB_OUTPUT, `commit=${commit}\ntag=${tag}\nversi
 if (process.env.GITHUB_STEP_SUMMARY)
   await appendFile(
     process.env.GITHUB_STEP_SUMMARY,
-    `### 发布 ${tag}\n\n四个平台将从同一提交 [${commit.slice(0, 7)}](https://github.com/${repository}/commit/${commit}) 构建，全部校验成功后公开发布。\n`
+    `### 发布 ${tag}\n\n` +
+      `| 项目 | 内容 |\n| --- | --- |\n` +
+      `| 源版本 | ${original.metadata.version} |\n` +
+      `| 目标版本 | ${version} |\n` +
+      `| 源提交 | [${source.slice(0, 7)}](https://github.com/${repository}/commit/${source}) |\n` +
+      `| 版本提交 | [${commit.slice(0, 7)}](https://github.com/${repository}/commit/${commit}) |\n` +
+      `| 平台 | macOS arm64 / x64、Windows x64、Linux x64 |\n\n` +
+      `四个平台将从版本提交构建，全部校验成功后公开 [${tag} 的下载页](https://github.com/${repository}/releases/tag/${tag})。\n`
   )
 console.log(`Prepared ${tag} at ${commit}`)

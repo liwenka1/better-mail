@@ -2,22 +2,21 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { lstat, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { artifactNames, releaseVersion } from './release-targets.mjs'
+import { artifactNames, compareReleaseVersions, releaseVersion } from './release-targets.mjs'
+import { releaseNotes } from './release-notes.mjs'
 
-const manual = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch'
 if (
   process.env.GITHUB_ACTIONS !== 'true' ||
-  (manual
-    ? process.env.GITHUB_REF !== 'refs/heads/main' ||
-      !process.env.RELEASE_TAG ||
-      !process.env.RELEASE_COMMIT
-    : !process.env.GITHUB_REF?.startsWith('refs/tags/'))
+  process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
+  process.env.GITHUB_REF !== 'refs/heads/main' ||
+  !process.env.RELEASE_TAG ||
+  !process.env.RELEASE_COMMIT
 )
-  throw new Error('Publish releases only from the tag or prepared manual release workflow.')
+  throw new Error('Publish releases only from the prepared manual release workflow on main.')
 const version = await releaseVersion()
 const tag = `v${version}`
 const repository = process.env.GITHUB_REPOSITORY
-const commit = manual ? process.env.RELEASE_COMMIT : process.env.GITHUB_SHA
+const commit = process.env.RELEASE_COMMIT
 const token = process.env.GH_TOKEN
 if (!/^[\w.-]+\/[\w.-]+$/.test(repository || '') || !/^[a-f0-9]{40}$/.test(commit || '') || !token)
   throw new Error('Release repository, commit or token is missing.')
@@ -79,15 +78,21 @@ if (existing && !existing.draft)
   throw new Error('This version is already public; publish a new version rather than replacing it.')
 if (existing && existing.tag_name !== tag)
   throw new Error('An existing draft belongs to a different tag.')
-const notes =
-  `所有平台均通过独立构建与原生 SQLite ABI 检查后发布。\n\n` +
-  `- macOS：Apple Silicon（arm64）与 Intel（x64），提供 DMG 和 ZIP。\n` +
-  `- Windows：x64 安装程序。\n` +
-  `- Linux：x64 AppImage 与 Debian 安装包。\n\n` +
-  `${version} 提供多账号邮件、统一收件箱、本地搜索、富文本写信、草稿、附件、持久化同步与操作队列。\n\n` +
-  `此版本尚未配置应用代码签名和 macOS 公证，系统可能显示发布者验证提示。\n` +
-  `请使用 SHA256SUMS.txt 核对安装包；各依赖声明包含在应用的 THIRD_PARTY_NOTICES.md 中。`
 const prerelease = version.includes('-')
+let makeLatest = false
+if (!prerelease) {
+  const latest = await request(`${api}/releases/latest`, {}, true)
+  if (
+    latest &&
+    (typeof latest.tag_name !== 'string' ||
+      !latest.tag_name.startsWith('v') ||
+      latest.draft ||
+      latest.prerelease)
+  )
+    throw new Error('The latest public release must have a standard vSemVer tag.')
+  makeLatest = !latest || compareReleaseVersions(version, latest.tag_name.slice(1)) > 0
+}
+const notes = await releaseNotes({ request, api, repository, commit, tag, version })
 const release =
   existing ||
   (await request(`${api}/releases`, {
@@ -146,7 +151,7 @@ const published = await request(`${api}/releases/${release.id}`, {
     body: notes,
     draft: false,
     prerelease,
-    make_latest: prerelease ? 'false' : 'true'
+    make_latest: makeLatest ? 'true' : 'false'
   })
 })
 console.log(`Published ${published.html_url}`)

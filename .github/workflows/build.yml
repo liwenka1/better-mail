@@ -1,0 +1,108 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      source:
+        description: Commit to check out and build
+        required: true
+        type: string
+      installers:
+        description: Build and upload release installers
+        default: false
+        type: boolean
+      release_tag:
+        description: Expected release tag for the source commit
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: mac-arm64
+            runner: macos-15
+            builder: --mac --arm64
+          - target: mac-x64
+            runner: macos-15-intel
+            builder: --mac --x64
+          - target: win-x64
+            runner: windows-2022
+            builder: --win --x64
+          - target: linux-x64
+            runner: ubuntu-24.04
+            builder: --linux --x64
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global pnpm@10.28.2 --ignore-scripts
+      - name: Set up Windows native-build Python
+        if: runner.os == 'Windows'
+        id: windows-python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Select Windows native-build Python
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          NATIVE_PYTHON: ${{ steps.windows-python.outputs.python-path }}
+        run: '"PYTHON=$env:NATIVE_PYTHON" >> $env:GITHUB_ENV'
+      - name: Install Linux runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libgtk-3-0t64 libnss3 libasound2t64 libgbm1 libxss1
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux' && inputs.installers
+        run: sudo apt-get install --no-install-recommends -y libarchive-tools
+      - name: Verify release version
+        run: node scripts/release-check.mjs version
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify source and build
+        run: pnpm check
+      - name: Verify native SQLite ABI
+        run: node scripts/release-check.mjs native ${{ matrix.target }}
+      - name: Generate dependency notices
+        if: inputs.installers
+        run: pnpm notices
+      - name: Build installers
+        if: inputs.installers
+        run: pnpm exec electron-builder ${{ matrix.builder }} --publish never
+      - name: Verify packaged runtime
+        if: inputs.installers
+        run: node scripts/release-check.mjs native ${{ matrix.target }} --packaged
+      - name: Prepare installer artifacts
+        if: inputs.installers
+        run: node scripts/release-check.mjs stage ${{ matrix.target }}
+      - name: Upload installers
+        if: inputs.installers
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installers-${{ matrix.target }}
+          path: release/upload/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+          overwrite: true
